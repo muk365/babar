@@ -1,0 +1,7 @@
+# Autorise tous les robots (agents utilisateurs) à explorer le site.
+User-agent: *
+Allow: /
+
+# Optionnel, mais bonne pratique : Indique l'emplacement de votre sitemap.
+# Vous pourrez générer un sitemap simple plus tard si vous le souhaitez.
+# Sitemap: http://localhost/babar/sitemap.xml

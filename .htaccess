@@ -1,0 +1,36 @@
+# FICHIER DE CONFIGURATION APACHE POUR PROJET BABAR
+
+# Active le moteur de réécriture d'URL
+RewriteEngine On
+
+# ----------------------------------------------------------------------
+# FORCER HTTPS
+# ----------------------------------------------------------------------
+# Redirige tout le trafic HTTP vers HTTPS pour la sécurité et le SEO.
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ----------------------------------------------------------------------
+# OPTIMISATION DE LA MISE EN CACHE (CACHE CONTROL)
+# ----------------------------------------------------------------------
+# Indique au navigateur de garder en mémoire les fichiers statiques pour
+# accélérer les visites futures, ce qui améliore le score de vitesse de page.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/gif "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+  ExpiresByType application/x-font-woff "access plus 1 year"
+</IfModule>
+
+# ----------------------------------------------------------------------
+# RETIRER L'EXTENSION .html (POUR DES URLS PROPRES)
+# ----------------------------------------------------------------------
+# Permet d'accéder à `monsite.com/index` au lieu de `monsite.com/index.html`.
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}\.html -f
+RewriteRule ^(.+)$ $1.html [L]
