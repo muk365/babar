@@ -4,40 +4,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const TWITCH_SCOPES = 'chat:read';
 
     const dom = {
-        loginButton: document.getElementById('login-button'),
-        loginScreen: document.getElementById('login-screen'),
-        appWrapper: document.getElementById('app-wrapper'),
-        usernameDisplay: document.getElementById('username'),
-        profilePic: document.getElementById('profile-pic'),
-        fontSelector: document.getElementById('font-selector'),
-        goalsDisplay: document.querySelector('.goals-display'),
-        goalsList: document.getElementById('goals-list'),
-        addGoalButton: document.getElementById('add-goal-button'),
-        goalTitleInput: document.getElementById('goal-title-input'),
-        goalTargetInput: document.getElementById('goal-target-input'),
-        globalTitleInput: document.getElementById('global-title-input'),
-        globalTargetInput: document.getElementById('global-target-input'),
-        globalTitleDisplay: document.getElementById('global-title-display'),
-        globalTargetText: document.getElementById('global-target-text'),
-        manualAddAmountInput: document.getElementById('manual-add-amount'),
-        manualAddButton: document.getElementById('manual-add-button'),
-        bitsRatio: document.getElementById('bits-ratio'),
-        primeRatio: document.getElementById('prime-ratio'),
-        subT1Ratio: document.getElementById('sub-t1-ratio'),
-        subT2Ratio: document.getElementById('sub-t2-ratio'),
-        subT3Ratio: document.getElementById('sub-t3-ratio'),
-        donationTrigger: document.getElementById('donation-trigger-text'),
-        globalColor: document.getElementById('global-color'),
-        globalContour: document.getElementById('global-contour-color'),
-        globalProgressText: document.getElementById('global-progress-text'),
+        loginButton: document.getElementById('login-button'), loginScreen: document.getElementById('login-screen'),
+        appWrapper: document.getElementById('app-wrapper'), usernameDisplay: document.getElementById('username'),
+        profilePic: document.getElementById('profile-pic'), fontSelector: document.getElementById('font-selector'),
+        goalsDisplay: document.querySelector('.goals-display'), goalsList: document.getElementById('goals-list'),
+        addGoalButton: document.getElementById('add-goal-button'), goalTitleInput: document.getElementById('goal-title-input'),
+        goalTargetInput: document.getElementById('goal-target-input'), globalTitleInput: document.getElementById('global-title-input'),
+        globalTargetInput: document.getElementById('global-target-input'), globalTitleDisplay: document.getElementById('global-title-display'),
+        globalTargetText: document.getElementById('global-target-text'), manualAddAmountInput: document.getElementById('manual-add-amount'),
+        manualAddButton: document.getElementById('manual-add-button'), bitsRatio: document.getElementById('bits-ratio'), 
+        primeRatio: document.getElementById('prime-ratio'), subT1Ratio: document.getElementById('sub-t1-ratio'),
+        subT2Ratio: document.getElementById('sub-t2-ratio'), subT3Ratio: document.getElementById('sub-t3-ratio'),
+        donationTrigger: document.getElementById('donation-trigger-text'), globalColor: document.getElementById('global-color'),
+        globalContour: document.getElementById('global-contour-color'), globalProgressText: document.getElementById('global-progress-text'),
         botUsernameInput: document.getElementById('bot-username-input'),
-        aboutToggle: document.getElementById('about-toggle'),
-        aboutSection: document.getElementById('about-section'),
+        aboutToggle: document.getElementById('about-toggle'), aboutSection: document.getElementById('about-section'),
         logoutButton: document.getElementById('logout-button')
     };
     
     let twitchClient = null;
     let state = {};
+    // Stockage des fonctions de traitement des événements pour les tests
+    const eventHandlers = {};
 
     function init() {
         const hash = window.location.hash.substring(1);
@@ -72,15 +60,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function connectToTwitchChat(channel, token) {
         if (typeof tmi === 'undefined') {
-            console.error("ERREUR CRITIQUE: La librairie TMI.js (bot de chat) n'a pas pu être chargée. Vérifiez la connexion internet et le lien du script dans index.html.");
+            console.error("ERREUR CRITIQUE: La librairie TMI.js (bot de chat) n'a pas pu être chargée.");
             return;
         }
         if (twitchClient) twitchClient.disconnect();
         twitchClient = new tmi.Client({ options: { debug: false }, identity: { username: channel, password: `oauth:${token}` }, channels: [channel] });
-        twitchClient.connect().catch(console.error);
+        
+        twitchClient.on('connected', (address, port) => console.log(`✅ Bot connecté avec succès au chat de ${channel}`));
+        twitchClient.connect().catch(err => console.error("❌ Erreur de connexion du bot:", err));
 
-        twitchClient.on('message', (channel, tags, message, self) => {
+        // On définit les fonctions de traitement une seule fois et on les stocke
+        eventHandlers.onMessage = (channel, tags, message, self) => {
             if (tags.bits) {
+                console.log(`[DÉTECTION] Bits reçus: ${tags.bits} de ${tags['display-name']}`);
                 const value = (parseInt(tags.bits, 10) / 100) * parseFloat(state.settings.bitsRatio);
                 updateGlobalTotal(value, `Bits de ${tags['display-name']}`);
             }
@@ -91,9 +83,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const amount = message.match(/(\d+[.,]?\d*)/g)?.map(n => parseFloat(n.replace(',', '.'))).find(n => !isNaN(n));
                 if (amount) updateGlobalTotal(amount, `Donation détectée de ${senderUsername}`);
             }
-        });
+        };
 
-        twitchClient.on('usernotice', (channel, tags, message, self) => {
+        eventHandlers.onUserNotice = (channel, tags, message, self) => {
+            console.log(`[DÉTECTION] UserNotice reçu: ${tags['msg-id']} de ${tags['display-name']}`);
             let value = 0;
             const subPlan = tags['msg-param-sub-plan'];
             if (tags['msg-id'] === 'sub' || tags['msg-id'] === 'resub') {
@@ -108,7 +101,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 else value = parseFloat(state.settings.subT1Ratio);
             }
             if (value > 0) updateGlobalTotal(value, `Sub de ${tags['display-name'] || 'Anonyme'}`);
-        });
+        };
+
+        twitchClient.on('message', eventHandlers.onMessage);
+        twitchClient.on('usernotice', eventHandlers.onUserNotice);
     }
 
     function updateGlobalTotal(amount, source) {
@@ -167,34 +163,23 @@ document.addEventListener('DOMContentLoaded', () => {
            goals: savedState?.goals || defaults.goals,
            settings: { ...defaults.settings, ...(savedState?.settings || {}) },
         };
-        dom.globalTitleInput.value = state.global.title; 
-        dom.globalTargetInput.value = state.global.target;
-        dom.globalColor.value = state.global.fillColor; 
-        dom.globalContour.value = state.global.contourColor;
-        dom.fontSelector.value = state.settings.font; 
-        dom.bitsRatio.value = state.settings.bitsRatio;
-        dom.primeRatio.value = state.settings.primeRatio; 
-        dom.subT1Ratio.value = state.settings.subT1Ratio;
-        dom.subT2Ratio.value = state.settings.subT2Ratio; 
-        dom.subT3Ratio.value = state.settings.subT3Ratio;
-        dom.donationTrigger.value = state.settings.donationTrigger; 
-        dom.botUsernameInput.value = state.settings.botUsername;
+        dom.globalTitleInput.value = state.global.title; dom.globalTargetInput.value = state.global.target;
+        dom.globalColor.value = state.global.fillColor; dom.globalContour.value = state.global.contourColor;
+        dom.fontSelector.value = state.settings.font; dom.bitsRatio.value = state.settings.bitsRatio;
+        dom.primeRatio.value = state.settings.primeRatio; dom.subT1Ratio.value = state.settings.subT1Ratio;
+        dom.subT2Ratio.value = state.settings.subT2Ratio; dom.subT3Ratio.value = state.settings.subT3Ratio;
+        dom.donationTrigger.value = state.settings.donationTrigger; dom.botUsernameInput.value = state.settings.botUsername;
     }
-    
-    // CORRIGÉ: Nouvelle fonction de déconnexion "douce"
+
     function handleLogout() {
-        // Le message est mis à jour pour ne plus effrayer l'utilisateur.
         if (confirm("Voulez-vous vraiment vous déconnecter ?\nVos paramètres et barres de progression seront conservés.")) {
-            // On ne touche PAS au localStorage.
-            // On redirige simplement vers l'URL de base, ce qui efface le token de l'URL et force la réapparition de l'écran de login.
             window.location.href = TWITCH_REDIRECT_URI;
         }
     }
     
     function setupEventListeners() {
         dom.loginButton.addEventListener('click', handleLogin);
-        dom.logoutButton.addEventListener('click', handleLogout); // Le listener appelle maintenant la nouvelle fonction.
-        
+        dom.logoutButton.addEventListener('click', handleLogout);
         const settingsToUpdate = {
             globalTitleInput: (val) => state.global.title = val, globalTargetInput: (val) => state.global.target = parseFloat(val) || 0,
             globalColor: (val) => state.global.fillColor = val, globalContour: (val) => state.global.contourColor = val,
@@ -203,78 +188,45 @@ document.addEventListener('DOMContentLoaded', () => {
             subT2Ratio: (val) => state.settings.subT2Ratio = parseFloat(val) || 0, subT3Ratio: (val) => state.settings.subT3Ratio = parseFloat(val) || 0,
             donationTrigger: (val) => state.settings.donationTrigger = val, botUsernameInput: (val) => state.settings.botUsername = val
         };
-
         for (const [domKey, updateFn] of Object.entries(settingsToUpdate)) {
             const eventType = ['fontSelector', 'globalColor', 'globalContour'].includes(domKey) ? 'change' : 'input';
-            dom[domKey].addEventListener(eventType, (e) => { 
-                updateFn(e.target.value); 
-                renderAll(); 
-            });
+            dom[domKey].addEventListener(eventType, (e) => { updateFn(e.target.value); renderAll(); });
         }
-        
         dom.addGoalButton.addEventListener('click', () => {
-            const title = dom.goalTitleInput.value.trim(); 
-            const target = parseFloat(dom.goalTargetInput.value);
+            const title = dom.goalTitleInput.value.trim(); const target = parseFloat(dom.goalTargetInput.value);
             if (title && target > 0) {
                 state.goals.push({ id: Date.now(), title, target, current: Math.min(state.global.current, target), fillColor: '#27ae60', contourColor: '#ffffff' });
-                renderAll(); 
-                dom.goalTitleInput.value = ''; 
-                dom.goalTargetInput.value = '';
+                renderAll(); dom.goalTitleInput.value = ''; dom.goalTargetInput.value = '';
             }
         });
-        
         dom.goalsList.addEventListener('click', (e) => {
              if (e.target.classList.contains('delete-goal')) {
                 const goalId = parseInt(e.target.dataset.id, 10);
-                if (confirm("Voulez-vous supprimer ce goal ?")) {
-                    state.goals = state.goals.filter(g => g.id !== goalId); 
-                    renderAll();
-                }
+                if (confirm("Voulez-vous supprimer ce goal ?")) { state.goals = state.goals.filter(g => g.id !== goalId); renderAll(); }
             }
         });
-        
         dom.goalsList.addEventListener('input', (e) => {
             if (e.target.classList.contains('color-picker')) {
                 const goal = state.goals.find(g => g.id === parseInt(e.target.dataset.id, 10));
-                if (goal) { 
-                    if (e.target.dataset.type === 'fill') goal.fillColor = e.target.value; 
-                    else goal.contourColor = e.target.value; 
-                    renderAll(); 
-                }
+                if (goal) { if (e.target.dataset.type === 'fill') goal.fillColor = e.target.value; else goal.contourColor = e.target.value; renderAll(); }
             }
         });
-        
         dom.manualAddButton.addEventListener('click', () => {
-            const amount = parseFloat(dom.manualAddAmountInput.value); 
-            updateGlobalTotal(amount, "Correction manuelle"); 
-            dom.manualAddAmountInput.value = '';
+            const amount = parseFloat(dom.manualAddAmountInput.value); updateGlobalTotal(amount, "Correction manuelle"); dom.manualAddAmountInput.value = '';
         });
-        
         dom.aboutToggle.addEventListener('click', () => {
             dom.aboutSection.classList.toggle('visible');
             const toggleText = dom.aboutToggle.textContent;
-            if (dom.aboutSection.classList.contains('visible')) { 
-                dom.aboutToggle.textContent = toggleText.replace('▼', '▲'); 
-            } else { 
-                dom.aboutToggle.textContent = toggleText.replace('▲', '▼'); 
-            }
+            if (dom.aboutSection.classList.contains('visible')) { dom.aboutToggle.textContent = toggleText.replace('▼', '▲'); } 
+            else { dom.aboutToggle.textContent = toggleText.replace('▲', '▼'); }
         });
-
         let draggedItem = null;
         dom.goalsList.addEventListener('dragstart', e => {
-            if (e.target.classList.contains('draggable')) {
-                draggedItem = e.target;
-                setTimeout(() => draggedItem.classList.add('dragging'), 0);
-            }
+            if (e.target.classList.contains('draggable')) { draggedItem = e.target; setTimeout(() => draggedItem.classList.add('dragging'), 0); }
         });
-        
         dom.goalsList.addEventListener('dragend', () => {
-            if(draggedItem) {
-                draggedItem.classList.remove('dragging');
-                draggedItem = null;
-            }
+            if(draggedItem) { draggedItem.classList.remove('dragging'); draggedItem = null; }
         });
-        
         dom.goalsList.addEventListener('dragover', e => {
             e.preventDefault();
             if(!draggedItem) return;
@@ -284,13 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (offset < 0 && offset > closest.offset) return { offset: offset, element: child };
                 else return closest;
             }, { offset: Number.NEGATIVE_INFINITY }).element;
-            if (afterElement == null) { 
-                dom.goalsList.appendChild(draggedItem); 
-            } else { 
-                dom.goalsList.insertBefore(draggedItem, afterElement); 
-            }
+            if (afterElement == null) { dom.goalsList.appendChild(draggedItem); } 
+            else { dom.goalsList.insertBefore(draggedItem, afterElement); }
         });
-        
         dom.goalsList.addEventListener('drop', e => {
             e.preventDefault();
             if (draggedItem) {
@@ -300,6 +248,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    
+    // --- ZONE DE TEST ACCESSIBLE DEPUIS LA CONSOLE ---
+    window.BabarSimulateCheer = function(bits, username = 'TestUser') {
+        console.log(`[TEST] Simulation de ${bits} BITS de ${username}`);
+        if (!eventHandlers.onMessage) { console.error("Le bot n'est pas connecté. Veuillez d'abord vous logger."); return; }
+        const fakeTags = { bits: String(bits), 'display-name': username, username: username.toLowerCase() };
+        eventHandlers.onMessage('#testchannel', fakeTags, `cheer${bits}`);
+    };
+    window.BabarSimulateSub = function(subPlan = '1000', username = 'TestUser') { // 1000, 2000, 3000, ou Prime
+        console.log(`[TEST] Simulation d'un SUB (${subPlan}) de ${username}`);
+        if (!eventHandlers.onUserNotice) { console.error("Le bot n'est pas connecté. Veuillez d'abord vous logger."); return; }
+        const fakeTags = { 'msg-id': 'sub', 'display-name': username, 'msg-param-sub-plan': subPlan };
+        eventHandlers.onUserNotice('#testchannel', fakeTags, 'A sub!');
+    };
     
     init();
 });
