@@ -30,15 +30,19 @@
     <div id="app-wrapper" class="hidden">
         <header>
             <h1>🐘 Tableau de bord Babar</h1>
-            <!-- NOUVEAU: Le bouton de déconnexion est ajouté ici -->
             <div class="user-info">
                 <p>Connecté en tant que <strong id="username"></strong></p>
                 <img id="profile-pic" src="" alt="Photo de profil">
                 <button id="logout-button" class="logout-button">Déconnexion</button>
             </div>
         </header>
+
+        <div id="bot-control-panel">
+            <button id="connect-bot-button">▶️ Lancer la Connexion du Bot</button>
+            <span id="bot-status">Statut du bot: Déconnecté 🔴</span>
+        </div>
+
         <main class="main-container">
-            <!-- ... (Le reste du contenu de 'main' est inchangé) ... -->
             <div class="config-panel">
                 <h2>Configuration Générale</h2>
                 <div class="form-group"><label>Police des textes</label><select id="font-selector"><option value="'Montserrat', sans-serif">Montserrat</option><option value="'Roboto', sans-serif">Roboto</option><option value="'Open Sans', sans-serif">Open Sans</option><option value="'Poppins', sans-serif">Poppins</option><option value="'Raleway', sans-serif">Raleway</option><option value="'Oswald', sans-serif">Oswald</option><option value="'Bebas Neue', cursive">Bebas Neue</option><option value="'Josefin Sans', sans-serif">Josefin Sans</option><option value="'Comfortaa', cursive">Comfortaa</option><option value="'Anton', sans-serif">Anton</option><option value="'Lobster', cursive">Lobster</option><option value="'Pacifico', cursive">Pacifico</option><option value="'Caveat', cursive">Caveat</option><option value="'Dancing Script', cursive">Dancing Script</option><option value="'Indie Flower', cursive">Indie Flower</option><option value="'Shadows Into Light', cursive">Shadows Into Light</option><option value="'Fredoka One', cursive">Fredoka One</option></select></div>
@@ -82,16 +86,8 @@
             <div class="copyright">Copyright 2025 Muk365</div>
         </footer>
     </div>
+    
     <script src="tmi.min.js"></script>
     <script src="app.js"></script>
-    <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-    <script>
-    kofiWidgetOverlay.draw('muk365', {
-        'type': 'floating-chat',
-        'floating-chat.donateButton.text': 'Support me',
-        'floating-chat.donateButton.background-color': '#794bc4',
-        'floating-chat.donateButton.text-color': '#fff'
-    });
-    </script>
 </body>
 </html>

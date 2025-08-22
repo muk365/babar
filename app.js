@@ -1,78 +1,116 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // ---- CONSTANTES DE CONFIGURATION ----
     const TWITCH_CLIENT_ID = "2e633lsofl6qejiyhpdkb2alkoy64u";
-    const TWITCH_REDIRECT_URI = "https://projet-babar.netlify.app";
-    const TWITCH_SCOPES = 'chat:read';
+    const TWITCH_REDIRECT_URI = "http://localhost/babar";
+    const TWITCH_SCOPES = 'chat:read chat:edit';
 
+    // ---- REFERENCES AU DOM ----
     const dom = {
         loginButton: document.getElementById('login-button'), loginScreen: document.getElementById('login-screen'),
         appWrapper: document.getElementById('app-wrapper'), usernameDisplay: document.getElementById('username'),
-        profilePic: document.getElementById('profile-pic'), fontSelector: document.getElementById('font-selector'),
-        goalsDisplay: document.querySelector('.goals-display'), goalsList: document.getElementById('goals-list'),
-        addGoalButton: document.getElementById('add-goal-button'), goalTitleInput: document.getElementById('goal-title-input'),
-        goalTargetInput: document.getElementById('goal-target-input'), globalTitleInput: document.getElementById('global-title-input'),
-        globalTargetInput: document.getElementById('global-target-input'), globalTitleDisplay: document.getElementById('global-title-display'),
-        globalTargetText: document.getElementById('global-target-text'), manualAddAmountInput: document.getElementById('manual-add-amount'),
-        manualAddButton: document.getElementById('manual-add-button'), bitsRatio: document.getElementById('bits-ratio'), 
-        primeRatio: document.getElementById('prime-ratio'), subT1Ratio: document.getElementById('sub-t1-ratio'),
-        subT2Ratio: document.getElementById('sub-t2-ratio'), subT3Ratio: document.getElementById('sub-t3-ratio'),
-        donationTrigger: document.getElementById('donation-trigger-text'), globalColor: document.getElementById('global-color'),
-        globalContour: document.getElementById('global-contour-color'), globalProgressText: document.getElementById('global-progress-text'),
-        botUsernameInput: document.getElementById('bot-username-input'),
+        profilePic: document.getElementById('profile-pic'), logoutButton: document.getElementById('logout-button'),
+        connectBotButton: document.getElementById('connect-bot-button'), botStatus: document.getElementById('bot-status'),
+        fontSelector: document.getElementById('font-selector'), goalsDisplay: document.querySelector('.goals-display'),
+        goalsList: document.getElementById('goals-list'), addGoalButton: document.getElementById('add-goal-button'),
+        goalTitleInput: document.getElementById('goal-title-input'), goalTargetInput: document.getElementById('goal-target-input'),
+        globalTitleInput: document.getElementById('global-title-input'), globalTargetInput: document.getElementById('global-target-input'),
+        globalTitleDisplay: document.getElementById('global-title-display'), globalTargetText: document.getElementById('global-target-text'),
+        manualAddAmountInput: document.getElementById('manual-add-amount'), manualAddButton: document.getElementById('manual-add-button'),
+        bitsRatio: document.getElementById('bits-ratio'), primeRatio: document.getElementById('prime-ratio'),
+        subT1Ratio: document.getElementById('sub-t1-ratio'), subT2Ratio: document.getElementById('sub-t2-ratio'),
+        subT3Ratio: document.getElementById('sub-t3-ratio'), donationTrigger: document.getElementById('donation-trigger-text'),
+        globalColor: document.getElementById('global-color'), globalContour: document.getElementById('global-contour-color'),
+        globalProgressText: document.getElementById('global-progress-text'), botUsernameInput: document.getElementById('bot-username-input'),
         aboutToggle: document.getElementById('about-toggle'), aboutSection: document.getElementById('about-section'),
-        logoutButton: document.getElementById('logout-button')
     };
     
+    // ---- VARIABLES GLOBALES DE L'APPLICATION ----
     let twitchClient = null;
     let state = {};
-    // Stockage des fonctions de traitement des événements pour les tests
-    const eventHandlers = {};
+    let session = { userInfo: null, token: null };
+    
+    // ================================================================================= //
+    // FONCTIONS PRINCIPALES
+    // ================================================================================= //
 
+    // --- INITIALISATION DE LA PAGE ---
     function init() {
         const hash = window.location.hash.substring(1);
         const params = new URLSearchParams(hash);
         const accessToken = params.get('access_token');
         history.pushState("", document.title, window.location.pathname + window.location.search);
+        
         loadStateFromLocalStorage();
         setupEventListeners();
         renderAll();
+
         if (accessToken) {
+            session.token = accessToken;
             dom.loginScreen.classList.add('hidden');
             dom.appWrapper.classList.remove('hidden');
             getUserInfo(accessToken);
         }
     }
-
+    
+    // --- CONNEXION & AUTHENTIFICATION ---
     function handleLogin() {
         const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${TWITCH_CLIENT_ID}&redirect_uri=${TWITCH_REDIRECT_URI}&response_type=token&scope=${TWITCH_SCOPES}`;
         window.location.href = authUrl;
     }
-
+    
+    function handleLogout() {
+        if (confirm("Voulez-vous vraiment vous déconnecter ?\nVos paramètres et barres de progression seront conservés.")) {
+            if (twitchClient) { twitchClient.disconnect(); }
+            window.location.href = window.location.pathname;
+        }
+    }
+    
     async function getUserInfo(token) {
         try {
             const response = await fetch('https://api.twitch.tv/helix/users', { headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': TWITCH_CLIENT_ID } });
             const data = await response.json();
-            const userInfo = data.data[0];
-            dom.usernameDisplay.textContent = userInfo.display_name;
-            dom.profilePic.src = userInfo.profile_image_url;
-            connectToTwitchChat(userInfo.login, token);
+            session.userInfo = data.data[0];
+            dom.usernameDisplay.textContent = session.userInfo.display_name;
+            dom.profilePic.src = session.userInfo.profile_image_url;
         } catch (error) { console.error("Erreur API Twitch:", error); }
     }
-
-    function connectToTwitchChat(channel, token) {
-        if (typeof tmi === 'undefined') {
-            console.error("ERREUR CRITIQUE: La librairie TMI.js (bot de chat) n'a pas pu être chargée.");
+    
+    // --- GESTION DU BOT ---
+    function connectToTwitchChat() {
+        if (!session.userInfo || !session.token) {
+            alert("Erreur: Informations de session Twitch manquantes. Essayez de vous reconnecter.");
             return;
         }
-        if (twitchClient) twitchClient.disconnect();
-        twitchClient = new tmi.Client({ options: { debug: false }, identity: { username: channel, password: `oauth:${token}` }, channels: [channel] });
+        if (twitchClient && twitchClient.readyState() === 'OPEN') {
+             twitchClient.disconnect();
+        }
         
-        twitchClient.on('connected', (address, port) => console.log(`✅ Bot connecté avec succès au chat de ${channel}`));
-        twitchClient.connect().catch(err => console.error("❌ Erreur de connexion du bot:", err));
+        const channel = session.userInfo.login;
+        const token = session.token;
 
-        // On définit les fonctions de traitement une seule fois et on les stocke
-        eventHandlers.onMessage = (channel, tags, message, self) => {
+        twitchClient = new tmi.Client({ 
+            options: { debug: false }, 
+            identity: { username: channel, password: `oauth:${token}` }, 
+            channels: [channel] 
+        });
+
+        twitchClient.on('connected', () => {
+            console.log(`✅ BOT CONNECTÉ au chat de ${channel}. L'écoute est active.`);
+            dom.botStatus.textContent = "Statut du bot: Connecté 🟢";
+            dom.connectBotButton.textContent = "✓ Reconnecter le Bot";
+            dom.connectBotButton.classList.add('connected');
+        });
+
+        twitchClient.on('disconnected', (reason) => {
+            console.error(`❌ Bot déconnecté. Raison: ${reason || 'Inconnue'}`);
+            dom.botStatus.textContent = `Statut du bot: Déconnecté 🔴`;
+            dom.connectBotButton.textContent = "▶️ Lancer la Connexion du Bot";
+            dom.connectBotButton.classList.remove('connected');
+        });
+
+        twitchClient.on('message', (channel, tags, message, self) => {
+            console.log(`[CHAT] ${tags['display-name']}: ${message}`);
             if (tags.bits) {
-                console.log(`[DÉTECTION] Bits reçus: ${tags.bits} de ${tags['display-name']}`);
                 const value = (parseInt(tags.bits, 10) / 100) * parseFloat(state.settings.bitsRatio);
                 updateGlobalTotal(value, `Bits de ${tags['display-name']}`);
             }
@@ -83,10 +121,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const amount = message.match(/(\d+[.,]?\d*)/g)?.map(n => parseFloat(n.replace(',', '.'))).find(n => !isNaN(n));
                 if (amount) updateGlobalTotal(amount, `Donation détectée de ${senderUsername}`);
             }
-        };
+        });
 
-        eventHandlers.onUserNotice = (channel, tags, message, self) => {
-            console.log(`[DÉTECTION] UserNotice reçu: ${tags['msg-id']} de ${tags['display-name']}`);
+        twitchClient.on('usernotice', (channel, tags, message, self) => {
+            console.log(`[EVENT] ${tags['msg-id']} de ${tags['display-name']}`);
             let value = 0;
             const subPlan = tags['msg-param-sub-plan'];
             if (tags['msg-id'] === 'sub' || tags['msg-id'] === 'resub') {
@@ -101,12 +139,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 else value = parseFloat(state.settings.subT1Ratio);
             }
             if (value > 0) updateGlobalTotal(value, `Sub de ${tags['display-name'] || 'Anonyme'}`);
-        };
-
-        twitchClient.on('message', eventHandlers.onMessage);
-        twitchClient.on('usernotice', eventHandlers.onUserNotice);
+        });
+        
+        console.log(`▶️ Tentative de connexion du bot au canal: ${channel}...`);
+        dom.botStatus.textContent = "Statut du bot: Connexion en cours... 🟡";
+        twitchClient.connect().catch(err => {
+            console.error("❌ ERREUR FATALE LORS DE LA CONNEXION:", err);
+            dom.botStatus.textContent = "Statut du bot: ERREUR 🔴";
+        });
     }
 
+    // --- MISE À JOUR & AFFICHAGE ---
     function updateGlobalTotal(amount, source) {
         if (isNaN(amount)) return;
         state.global.current = Math.max(0, state.global.current + amount);
@@ -147,6 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- GESTION DES DONNÉES LOCALES ---
     function saveStateToLocalStorage() { 
         localStorage.setItem('projetBabarState', JSON.stringify(state)); 
     }
@@ -171,15 +215,12 @@ document.addEventListener('DOMContentLoaded', () => {
         dom.donationTrigger.value = state.settings.donationTrigger; dom.botUsernameInput.value = state.settings.botUsername;
     }
 
-    function handleLogout() {
-        if (confirm("Voulez-vous vraiment vous déconnecter ?\nVos paramètres et barres de progression seront conservés.")) {
-            window.location.href = TWITCH_REDIRECT_URI;
-        }
-    }
-    
+    // --- INITIALISATION DES ÉVÉNEMENTS ---
     function setupEventListeners() {
         dom.loginButton.addEventListener('click', handleLogin);
         dom.logoutButton.addEventListener('click', handleLogout);
+        dom.connectBotButton.addEventListener('click', connectToTwitchChat);
+        
         const settingsToUpdate = {
             globalTitleInput: (val) => state.global.title = val, globalTargetInput: (val) => state.global.target = parseFloat(val) || 0,
             globalColor: (val) => state.global.fillColor = val, globalContour: (val) => state.global.contourColor = val,
@@ -188,10 +229,12 @@ document.addEventListener('DOMContentLoaded', () => {
             subT2Ratio: (val) => state.settings.subT2Ratio = parseFloat(val) || 0, subT3Ratio: (val) => state.settings.subT3Ratio = parseFloat(val) || 0,
             donationTrigger: (val) => state.settings.donationTrigger = val, botUsernameInput: (val) => state.settings.botUsername = val
         };
+
         for (const [domKey, updateFn] of Object.entries(settingsToUpdate)) {
             const eventType = ['fontSelector', 'globalColor', 'globalContour'].includes(domKey) ? 'change' : 'input';
             dom[domKey].addEventListener(eventType, (e) => { updateFn(e.target.value); renderAll(); });
         }
+        
         dom.addGoalButton.addEventListener('click', () => {
             const title = dom.goalTitleInput.value.trim(); const target = parseFloat(dom.goalTargetInput.value);
             if (title && target > 0) {
@@ -199,34 +242,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderAll(); dom.goalTitleInput.value = ''; dom.goalTargetInput.value = '';
             }
         });
+        
         dom.goalsList.addEventListener('click', (e) => {
              if (e.target.classList.contains('delete-goal')) {
                 const goalId = parseInt(e.target.dataset.id, 10);
                 if (confirm("Voulez-vous supprimer ce goal ?")) { state.goals = state.goals.filter(g => g.id !== goalId); renderAll(); }
             }
         });
+        
         dom.goalsList.addEventListener('input', (e) => {
             if (e.target.classList.contains('color-picker')) {
                 const goal = state.goals.find(g => g.id === parseInt(e.target.dataset.id, 10));
                 if (goal) { if (e.target.dataset.type === 'fill') goal.fillColor = e.target.value; else goal.contourColor = e.target.value; renderAll(); }
             }
         });
+        
         dom.manualAddButton.addEventListener('click', () => {
             const amount = parseFloat(dom.manualAddAmountInput.value); updateGlobalTotal(amount, "Correction manuelle"); dom.manualAddAmountInput.value = '';
         });
+        
         dom.aboutToggle.addEventListener('click', () => {
             dom.aboutSection.classList.toggle('visible');
             const toggleText = dom.aboutToggle.textContent;
             if (dom.aboutSection.classList.contains('visible')) { dom.aboutToggle.textContent = toggleText.replace('▼', '▲'); } 
             else { dom.aboutToggle.textContent = toggleText.replace('▲', '▼'); }
         });
+
         let draggedItem = null;
         dom.goalsList.addEventListener('dragstart', e => {
             if (e.target.classList.contains('draggable')) { draggedItem = e.target; setTimeout(() => draggedItem.classList.add('dragging'), 0); }
         });
+        
         dom.goalsList.addEventListener('dragend', () => {
             if(draggedItem) { draggedItem.classList.remove('dragging'); draggedItem = null; }
         });
+        
         dom.goalsList.addEventListener('dragover', e => {
             e.preventDefault();
             if(!draggedItem) return;
@@ -239,6 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (afterElement == null) { dom.goalsList.appendChild(draggedItem); } 
             else { dom.goalsList.insertBefore(draggedItem, afterElement); }
         });
+        
         dom.goalsList.addEventListener('drop', e => {
             e.preventDefault();
             if (draggedItem) {
@@ -248,20 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    
-    // --- ZONE DE TEST ACCESSIBLE DEPUIS LA CONSOLE ---
-    window.BabarSimulateCheer = function(bits, username = 'TestUser') {
-        console.log(`[TEST] Simulation de ${bits} BITS de ${username}`);
-        if (!eventHandlers.onMessage) { console.error("Le bot n'est pas connecté. Veuillez d'abord vous logger."); return; }
-        const fakeTags = { bits: String(bits), 'display-name': username, username: username.toLowerCase() };
-        eventHandlers.onMessage('#testchannel', fakeTags, `cheer${bits}`);
-    };
-    window.BabarSimulateSub = function(subPlan = '1000', username = 'TestUser') { // 1000, 2000, 3000, ou Prime
-        console.log(`[TEST] Simulation d'un SUB (${subPlan}) de ${username}`);
-        if (!eventHandlers.onUserNotice) { console.error("Le bot n'est pas connecté. Veuillez d'abord vous logger."); return; }
-        const fakeTags = { 'msg-id': 'sub', 'display-name': username, 'msg-param-sub-plan': subPlan };
-        eventHandlers.onUserNotice('#testchannel', fakeTags, 'A sub!');
-    };
-    
+
+    // --- DÉMARRAGE DE L'APPLICATION ---
     init();
 });
