@@ -6,11 +6,11 @@
     <title>🐘 Projet Babar - Outil Gratuit de Barres de Progression pour Twitch</title>
     <meta name="description" content="Créez des barres de progression et des objectifs de dons (donation goals) personnalisables pour votre stream Twitch. Outil gratuit, capturable par OBS, avec bot intégré.">
     <meta name="keywords" content="twitch, overlay, donation goal, barre de progression, objectif de dons, sub goal, bits goal, streamer, outil, gratuit, obs, streamlabs, babar">
-    <link rel="canonical" href="http://localhost/babar/">
+    <link rel="canonical" href="https://projet-babar.netlify.app">
     <meta property="og:title" content="🐘 Projet Babar - Outil Gratuit pour vos Objectifs Twitch">
     <meta property="og:description" content="Gestionnaire complet de barres de progression pour streamers. Personnalisable, draggable, avec bot intégré pour détecter subs, bits et dons.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="http://localhost/babar/">
+    <meta property="og:url" content="https://projet-babar.netlify.app">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="🐘 Projet Babar - Outil Gratuit pour vos Objectifs Twitch">
     <meta name="twitter:description" content="Gestionnaire complet de barres de progression pour streamers. Personnalisable, draggable, avec bot intégré.">
@@ -25,6 +25,9 @@
             <h1>🐘 Projet Babar</h1>
             <p>Gestionnaire de barres de progression pour vos streams Twitch.</p>
             <button id="login-button">Se connecter avec Twitch</button>
+            <div id="debug-info" style="margin-top: 20px; font-size: 0.8em; color: #999;">
+                <p>Status TMI: <span id="tmi-status">Chargement...</span></p>
+            </div>
         </div>
     </div>
     <div id="app-wrapper" class="hidden">
@@ -36,35 +39,128 @@
                 <button id="logout-button" class="logout-button">Déconnexion</button>
             </div>
         </header>
-
-        <div id="bot-control-panel">
-            <button id="connect-bot-button">▶️ Lancer la Connexion du Bot</button>
-            <span id="bot-status">Statut du bot: Déconnecté 🔴</span>
-        </div>
-
         <main class="main-container">
             <div class="config-panel">
                 <h2>Configuration Générale</h2>
-                <div class="form-group"><label>Police des textes</label><select id="font-selector"><option value="'Montserrat', sans-serif">Montserrat</option><option value="'Roboto', sans-serif">Roboto</option><option value="'Open Sans', sans-serif">Open Sans</option><option value="'Poppins', sans-serif">Poppins</option><option value="'Raleway', sans-serif">Raleway</option><option value="'Oswald', sans-serif">Oswald</option><option value="'Bebas Neue', cursive">Bebas Neue</option><option value="'Josefin Sans', sans-serif">Josefin Sans</option><option value="'Comfortaa', cursive">Comfortaa</option><option value="'Anton', sans-serif">Anton</option><option value="'Lobster', cursive">Lobster</option><option value="'Pacifico', cursive">Pacifico</option><option value="'Caveat', cursive">Caveat</option><option value="'Dancing Script', cursive">Dancing Script</option><option value="'Indie Flower', cursive">Indie Flower</option><option value="'Shadows Into Light', cursive">Shadows Into Light</option><option value="'Fredoka One', cursive">Fredoka One</option></select></div>
+                
+                <!-- Debug Section -->
+                <div class="debug-section" style="background: #2c3e50; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 2px solid #e74c3c;">
+                    <h3 style="color: #e74c3c; margin-top: 0;">🔧 Zone de Debug</h3>
+                    <p style="font-size: 0.9em; margin: 5px 0;">Status Bot: <span id="bot-status" style="font-weight: bold; color: #f39c12;">Non connecté</span></p>
+                    <div style="display: flex; gap: 10px; margin: 10px 0;">
+                        <button onclick="testBits()" style="background: #9b59b6; font-size: 0.8em; padding: 5px 10px;">Test 100 Bits</button>
+                        <button onclick="testSub()" style="background: #3498db; font-size: 0.8em; padding: 5px 10px;">Test Sub T1</button>
+                        <button onclick="testPrime()" style="background: #f39c12; font-size: 0.8em; padding: 5px 10px;">Test Prime</button>
+                    </div>
+                    <div id="debug-log" style="background: #1a1a1d; padding: 10px; max-height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.8em; border-radius: 3px;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label>Police des textes</label>
+                    <select id="font-selector">
+                        <option value="'Montserrat', sans-serif">Montserrat</option>
+                        <option value="'Roboto', sans-serif">Roboto</option>
+                        <option value="'Open Sans', sans-serif">Open Sans</option>
+                        <option value="'Poppins', sans-serif">Poppins</option>
+                        <option value="'Raleway', sans-serif">Raleway</option>
+                        <option value="'Oswald', sans-serif">Oswald</option>
+                        <option value="'Bebas Neue', cursive">Bebas Neue</option>
+                        <option value="'Josefin Sans', sans-serif">Josefin Sans</option>
+                        <option value="'Comfortaa', cursive">Comfortaa</option>
+                        <option value="'Anton', sans-serif">Anton</option>
+                        <option value="'Lobster', cursive">Lobster</option>
+                        <option value="'Pacifico', cursive">Pacifico</option>
+                        <option value="'Caveat', cursive">Caveat</option>
+                        <option value="'Dancing Script', cursive">Dancing Script</option>
+                        <option value="'Indie Flower', cursive">Indie Flower</option>
+                        <option value="'Shadows Into Light', cursive">Shadows Into Light</option>
+                        <option value="'Fredoka One', cursive">Fredoka One</option>
+                    </select>
+                </div>
+
                 <h3>🌟 Goal Global 🌟</h3>
-                <div class="form-group"><label for="global-title-input">Titre du Goal Global</label><input type="text" id="global-title-input" value="Objectif de Stream Global"></div>
-                <div class="form-group"><label for="global-target-input">Montant du Goal Global (€)</label><input type="number" id="global-target-input" value="1000" step="10"></div>
+                <div class="form-group">
+                    <label for="global-title-input">Titre du Goal Global</label>
+                    <input type="text" id="global-title-input" value="Objectif de Stream Global">
+                </div>
+                <div class="form-group">
+                    <label for="global-target-input">Montant du Goal Global (€)</label>
+                    <input type="number" id="global-target-input" value="1000" step="10">
+                </div>
+
                 <h3>🐘 Ratios des Événements</h3>
-                <div class="ratio-grid"><div class="form-group"><label>1 Prime = €</label><input type="number" id="prime-ratio" value="2.5" step="0.1"></div><div class="form-group"><label>100 Bits = €</label><input type="number" id="bits-ratio" value="1" step="0.1"></div><div class="form-group"><label>1 Sub T1 = €</label><input type="number" id="sub-t1-ratio" value="5" step="0.1"></div><div class="form-group"><label>1 Sub T2 = €</label><input type="number" id="sub-t2-ratio" value="10" step="0.1"></div><div class="form-group"><label>1 Sub T3 = €</label><input type="number" id="sub-t3-ratio" value="25" step="0.1"></div></div>
+                <div class="ratio-grid">
+                    <div class="form-group">
+                        <label>1 Prime = €</label>
+                        <input type="number" id="prime-ratio" value="2.5" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>100 Bits = €</label>
+                        <input type="number" id="bits-ratio" value="1" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>1 Sub T1 = €</label>
+                        <input type="number" id="sub-t1-ratio" value="5" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>1 Sub T2 = €</label>
+                        <input type="number" id="sub-t2-ratio" value="10" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>1 Sub T3 = €</label>
+                        <input type="number" id="sub-t3-ratio" value="25" step="0.1">
+                    </div>
+                </div>
+
                 <h3>🤖 Bot de Donation par Chat</h3>
-                <div class="form-group"><label for="bot-username-input">Nom du bot à écouter (optionnel)</label><input type="text" id="bot-username-input" placeholder="ex: Streamlabs"></div>
-                <div class="form-group"><label for="donation-trigger-text">Fragment de message à détecter</label><input type="text" id="donation-trigger-text" placeholder="ex: a fait un don de"><small>Le bot cherchera un nombre dans le message du bot spécifié.</small></div>
+                <div class="form-group">
+                    <label for="bot-username-input">Nom du bot à écouter (optionnel)</label>
+                    <input type="text" id="bot-username-input" placeholder="ex: Streamlabs">
+                </div>
+                <div class="form-group">
+                    <label for="donation-trigger-text">Fragment de message à détecter</label>
+                    <input type="text" id="donation-trigger-text" placeholder="ex: a fait un don de">
+                    <small>Le bot cherchera un nombre dans le message du bot spécifié.</small>
+                </div>
+
                 <h3>🔧 Correction & Simulation</h3>
-                <div class="form-group"><label for="manual-add-amount">Ajouter ou Retirer un montant (€)</label><input type="number" id="manual-add-amount" placeholder="5.50 ou -10"><button id="manual-add-button" style="margin-top: 10px; width: 100%;">Appliquer la correction</button></div>
+                <div class="form-group">
+                    <label for="manual-add-amount">Ajouter ou Retirer un montant (€)</label>
+                    <input type="number" id="manual-add-amount" placeholder="5.50 ou -10">
+                    <button id="manual-add-button" style="margin-top: 10px; width: 100%;">Appliquer la correction</button>
+                </div>
+
                 <h3>🐘 Créer un nouveau Goal</h3>
-                <div class="add-goal-form"><input type="text" id="goal-title-input" placeholder="Titre (ex: Nouvelle Chaise)"><input type="number" id="goal-target-input" placeholder="Objectif (€)"><button id="add-goal-button">Ajouter le Goal</button></div>
+                <div class="add-goal-form">
+                    <input type="text" id="goal-title-input" placeholder="Titre (ex: Nouvelle Chaise)">
+                    <input type="number" id="goal-target-input" placeholder="Objectif (€)">
+                    <button id="add-goal-button">Ajouter le Goal</button>
+                </div>
             </div>
+
             <div class="goals-display">
                 <h2>Affichage pour OBS (Capture de fenêtre)</h2>
-                <div class="goal-container global-goal"><h3 id="global-title-display">🌟 Objectif de Stream Global 🌟</h3><div class="progress-bar-wrapper"><span class="progress-label start">0€</span><div class="progress-bar"><div class="progress-bar-fill" id="global-fill"></div><span class="progress-bar-text" id="global-progress-text">0.00€</span></div><span class="progress-label end" id="global-target-text">1000€</span></div><div class="goal-config"><label>Couleur</label><input type="color" class="color-picker" id="global-color" value="#ff8c00"><label>Contour</label><input type="color" class="color-picker" id="global-contour-color" value="#ffffff"></div></div>
+                <div class="goal-container global-goal">
+                    <h3 id="global-title-display">🌟 Objectif de Stream Global 🌟</h3>
+                    <div class="progress-bar-wrapper">
+                        <span class="progress-label start">0€</span>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="global-fill"></div>
+                            <span class="progress-bar-text" id="global-progress-text">0.00€</span>
+                        </div>
+                        <span class="progress-label end" id="global-target-text">1000€</span>
+                    </div>
+                    <div class="goal-config">
+                        <label>Couleur</label>
+                        <input type="color" class="color-picker" id="global-color" value="#ff8c00">
+                        <label>Contour</label>
+                        <input type="color" class="color-picker" id="global-contour-color" value="#ffffff">
+                    </div>
+                </div>
                 <div id="goals-list"></div>
             </div>
         </main>
+
         <footer>
             <span id="about-toggle">🐘 À propos du Projet Babar / About Project Babar ▼</span>
             <div id="about-section">
@@ -73,21 +169,64 @@
                         <h3>Projet Babar 🇫🇷</h3>
                         <p>L'outil ultime pour gérer vos objectifs de stream sur Twitch. Créez des barres de progression gratuites et personnalisables pour vos événements, capturables directement via OBS.</p>
                         <h4>Fonctionnalités Clés :</h4>
-                        <ul><li>📊 Barres Multiples et Dynamiques</li><li>🎨 Personnalisation Totale (Couleurs, Polices)</li><li>🤖 Bot de Chat Intégré (Subs, Bits, Primes, Dons)</li><li>✋ Glisser-Déposer pour réorganiser</li><li>🔒 Zéro Installation & 100% Privé</li></ul>
+                        <ul>
+                            <li>📊 Barres Multiples et Dynamiques</li>
+                            <li>🎨 Personnalisation Totale (Couleurs, Polices)</li>
+                            <li>🤖 Bot de Chat Intégré (Subs, Bits, Primes, Dons)</li>
+                            <li>✋ Glisser-Déposer pour réorganiser</li>
+                            <li>🔒 Zéro Installation & 100% Privé</li>
+                        </ul>
                     </div>
                     <div class="language-column">
                         <h3>Project Babar 🇬🇧</h3>
                         <p>The ultimate tool to manage your Twitch stream goals. Create free, customizable progress bars for your events, perfectly designed to be captured through OBS.</p>
                         <h4>Key Features:</h4>
-                        <ul><li>📊 Dynamic & Multiple Goal Bars</li><li>🎨 Full Customization (Colors, Fonts)</li><li>🤖 Built-in Chat Bot (Subs, Bits, Primes, Donations)</li><li>✋ Drag & Drop to reorder</li><li>🔒 Zero-Install & 100% Private</li></ul>
+                        <ul>
+                            <li>📊 Dynamic & Multiple Goal Bars</li>
+                            <li>🎨 Full Customization (Colors, Fonts)</li>
+                            <li>🤖 Built-in Chat Bot (Subs, Bits, Primes, Donations)</li>
+                            <li>✋ Drag & Drop to reorder</li>
+                            <li>🔒 Zero-Install & 100% Private</li>
+                        </ul>
                     </div>
                 </div>
             </div>
             <div class="copyright">Copyright 2025 Muk365</div>
         </footer>
     </div>
-    
+
+    <!-- TMI.js via CDN pour assurer le chargement -->
     <script src="tmi.min.js"></script>
     <script src="app.js"></script>
+    
+    <!-- Ko-fi widget -->
+    <script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+    <script>
+    kofiWidgetOverlay.draw('muk365', {
+        'type': 'floating-chat',
+        'floating-chat.donateButton.text': 'Support me',
+        'floating-chat.donateButton.background-color': '#794bc4',
+        'floating-chat.donateButton.text-color': '#fff'
+    });
+    
+    // Fonctions de test globales
+    function testBits() {
+        if (window.BabarSimulateCheer) {
+            window.BabarSimulateCheer(100, 'TestUser');
+        }
+    }
+    
+    function testSub() {
+        if (window.BabarSimulateSub) {
+            window.BabarSimulateSub('1000', 'TestUser');
+        }
+    }
+    
+    function testPrime() {
+        if (window.BabarSimulateSub) {
+            window.BabarSimulateSub('Prime', 'TestUser');
+        }
+    }
+    </script>
 </body>
 </html>
