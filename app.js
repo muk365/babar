@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const TWITCH_CLIENT_ID = "2e633lsofl6qejiyhpdkb2alkoy64u";
-    const TWITCH_REDIRECT_URI = "https://projet-babar.netlify.app";
+    const TWITCH_REDIRECT_URI = "http://localhost/babar";
     const TWITCH_SCOPES = 'chat:read';
 
     const dom = {
@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             debugLog(`Notice: ${msgid} - ${message}`);
         });
 
-        // Définir les gestionnaires d'événements
+        // ⚠️ CORRECTION PRINCIPALE: Définir les gestionnaires AVANT connect()
         setupEventHandlers();
 
         // Tentative de connexion
@@ -201,9 +201,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupEventHandlers() {
+        if (!twitchClient) {
+            debugLog("❌ Impossible de configurer les gestionnaires: client TMI inexistant");
+            return;
+        }
+
         // Gestionnaire pour les messages (bits et donations)
-        eventHandlers.onMessage = (channel, tags, message, self) => {
+        const onMessage = (channel, tags, message, self) => {
             if (self) return; // Ignorer nos propres messages
+
+            debugLog(`📩 Message reçu de ${tags.username}: ${message.substring(0, 50)}...`);
 
             // Détection des bits
             if (tags.bits) {
@@ -238,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         // Gestionnaire pour les événements utilisateur (subs, subgifts, etc.)
-        eventHandlers.onUserNotice = (channel, tags, message, self) => {
+        const onUserNotice = (channel, tags, message, self) => {
             const msgId = tags['msg-id'];
             const username = tags['display-name'] || 'Anonyme';
             const subPlan = tags['msg-param-sub-plan'] || '1000';
@@ -299,18 +306,23 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         // Événement pour les raids (optionnel)
-        eventHandlers.onRaided = (channel, username, viewers) => {
+        const onRaided = (channel, username, viewers) => {
             console.log(`[RAID] ${username} a raid avec ${viewers} viewers`);
             debugLog(`🚀 RAID: ${username} (${viewers} viewers)`);
             // Vous pouvez ajouter une logique pour les raids si souhaité
         };
 
-        // Attacher les gestionnaires au client TMI
-        if (twitchClient) {
-            twitchClient.on('message', eventHandlers.onMessage);
-            twitchClient.on('usernotice', eventHandlers.onUserNotice);
-            twitchClient.on('raided', eventHandlers.onRaided);
-        }
+        // ⚠️ CORRECTION PRINCIPALE: Attacher directement au client TMI
+        twitchClient.on('message', onMessage);
+        twitchClient.on('usernotice', onUserNotice);
+        twitchClient.on('raided', onRaided);
+
+        // Stocker les références pour les tests
+        eventHandlers.onMessage = onMessage;
+        eventHandlers.onUserNotice = onUserNotice;
+        eventHandlers.onRaided = onRaided;
+
+        debugLog("✅ Gestionnaires d'événements configurés");
     }
 
     function updateGlobalTotal(amount, source) {
@@ -371,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
             el.dataset.goalId = goal.id;
             
             el.innerHTML = `
-                <h3>🐘 ${goal.title}</h3>
+                <h3>😍 ${goal.title}</h3>
                 <div class="progress-bar-wrapper">
                     <span class="progress-label start">0€</span>
                     <div class="progress-bar" style="border-color:${goal.contourColor};">
