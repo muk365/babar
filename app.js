@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     const TWITCH_CLIENT_ID = "2e633lsofl6qejiyhpdkb2alkoy64u";
-    const TWITCH_REDIRECT_URI = "http://projet-babar.netlify.app";
+    const TWITCH_REDIRECT_URI = "https://projet-babar.netlify.app";
     const TWITCH_SCOPES = 'chat:read';
 
     const dom = {
