@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const TWITCH_CLIENT_ID = "2e633lsofl6qejiyhpdkb2alkoy64u";
     const TWITCH_REDIRECT_URI = "https://projet-babar.netlify.app";
-    const TWITCH_SCOPES = 'chat:read';
+    const TWITCH_SCOPES = 'chat:read+channel:read:subscriptions+bits:read';
 
     const dom = {
         loginButton: document.getElementById('login-button'), 
@@ -126,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Configuration TMI corrigée pour assurer la réception des événements
     function connectToTwitchChat(channel, token) {
         if (typeof tmi === 'undefined') {
             const errorMsg = "ERREUR CRITIQUE: La librairie TMI.js (bot de chat) n'a pas pu être chargée.";
@@ -144,31 +145,39 @@ document.addEventListener('DOMContentLoaded', () => {
         debugLog(`Tentative de connexion au canal: ${channel}`);
         updateBotStatus("Connexion...");
 
-        // Configuration du client TMI avec options étendues
+        // ✅ CONFIGURATION CORRIGÉE avec les bonnes options
         const clientConfig = {
             options: { 
-                debug: false,
+                debug: true, // Activer temporairement pour debug
                 messagesLogLevel: "info"
             },
             connection: {
                 reconnect: true,
-                secure: true
+                secure: true,
+                maxReconnectAttempts: 5,
+                maxReconnectInterval: 30000,
+                reconnectDecay: 1.5,
+                reconnectInterval: 1000
             },
             identity: { 
                 username: channel, 
                 password: `oauth:${token}` 
             }, 
-            channels: [`#${channel}`] // Important: préfixer avec #
+            channels: [`#${channel}`]
         };
 
         twitchClient = new tmi.Client(clientConfig);
         
         // Événements de connexion
         twitchClient.on('connected', (address, port) => {
-            const msg = `✅ Bot connecté avec succès au chat de ${channel}`;
+            const msg = `✅ Bot connecté avec succès au chat de ${channel} (${address}:${port})`;
             console.log(msg);
             debugLog(msg);
             updateBotStatus("Connecté");
+            
+            // ✅ DEMANDER EXPLICITEMENT LES CAPABILITIES
+            // Ceci assure que nous recevons tous les tags nécessaires
+            twitchClient.raw('CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership');
         });
 
         twitchClient.on('disconnected', (reason) => {
@@ -183,34 +192,54 @@ document.addEventListener('DOMContentLoaded', () => {
             updateBotStatus("Reconnexion...");
         });
 
-        // Gestion des erreurs
+        // ✅ GESTION D'ERREURS AMÉLIORÉE
         twitchClient.on('notice', (channel, msgid, message) => {
-            debugLog(`Notice: ${msgid} - ${message}`);
+            debugLog(`Notice [${msgid}]: ${message}`);
+            if (msgid === 'msg_channel_suspended' || msgid === 'no_permission') {
+                updateBotStatus("Erreur permissions");
+            }
         });
 
-        // ⚠️ CORRECTION PRINCIPALE: Définir les gestionnaires AVANT connect()
+        // ✅ ÉVÉNEMENT POUR DIAGNOSTIQUER LES PROBLÈMES
+        twitchClient.on('raw_message', (messageCloned, message) => {
+            // Log tous les messages bruts pour debug (temporaire)
+            if (message.command === 'USERNOTICE' || (message.tags && message.tags.bits)) {
+                debugLog(`RAW: ${message.command} - Tags: ${JSON.stringify(message.tags)}`);
+            }
+        });
+
+        // Configurer les gestionnaires AVANT la connexion
         setupEventHandlers();
 
-        // Tentative de connexion
+        // Tentative de connexion avec meilleure gestion d'erreurs
         twitchClient.connect().catch(err => {
             const errorMsg = `❌ Erreur de connexion du bot: ${err.message}`;
             console.error(errorMsg, err);
             debugLog(errorMsg);
             updateBotStatus("Erreur");
+            
+            // Suggestions basées sur l'erreur
+            if (err.message.includes('Login authentication failed')) {
+                debugLog("💡 Solution: Token expiré, reconnectez-vous");
+            } else if (err.message.includes('No response from Twitch')) {
+                debugLog("💡 Solution: Problème réseau, vérifiez votre connexion");
+            }
         });
     }
 
+    // ✅ GESTIONNAIRES D'ÉVÉNEMENTS AMÉLIORÉS
     function setupEventHandlers() {
         if (!twitchClient) {
             debugLog("❌ Impossible de configurer les gestionnaires: client TMI inexistant");
             return;
         }
 
-        // Gestionnaire pour les messages (bits et donations)
+        // ✅ GESTIONNAIRE MESSAGE AMÉLIORÉ (pour bits et donations)
         const onMessage = (channel, tags, message, self) => {
-            if (self) return; // Ignorer nos propres messages
+            if (self) return;
 
-            debugLog(`📩 Message reçu de ${tags.username}: ${message.substring(0, 50)}...`);
+            // Log détaillé des tags pour debug
+            debugLog(`📩 Message de ${tags.username}: ${message.substring(0, 50)}... | Tags: ${JSON.stringify(tags)}`);
 
             // Détection des bits
             if (tags.bits) {
@@ -224,13 +253,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // Détection des donations par mot-clé
+            // Détection des donations par mot-clé (inchangé)
             const trigger = state.settings.donationTrigger.toLowerCase().trim();
             const botUsername = state.settings.botUsername.toLowerCase().trim();
             const senderUsername = tags.username.toLowerCase();
 
             if (trigger && message.toLowerCase().includes(trigger)) {
-                // Si un bot spécifique est défini, vérifier que le message vient de ce bot
                 if (!botUsername || senderUsername === botUsername) {
                     const matches = message.match(/(\d+[.,]?\d*)/g);
                     const amount = matches?.map(n => parseFloat(n.replace(',', '.'))).find(n => !isNaN(n) && n > 0);
@@ -244,13 +272,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        // Gestionnaire pour les événements utilisateur (subs, subgifts, etc.)
+        // ✅ GESTIONNAIRE USERNOTICE AMÉLIORÉ (subs, subgifts, etc.)
         const onUserNotice = (channel, tags, message, self) => {
             const msgId = tags['msg-id'];
             const username = tags['display-name'] || 'Anonyme';
             const subPlan = tags['msg-param-sub-plan'] || '1000';
             
-            console.log(`[USER_NOTICE] Type: ${msgId}, Plan: ${subPlan}, User: ${username}`);
+            // Log détaillé pour debug
+            console.log(`[USER_NOTICE] Type: ${msgId}, Plan: ${subPlan}, User: ${username}, All tags:`, tags);
             debugLog(`🎉 EVENT: ${msgId} (${subPlan}) de ${username}`);
             
             let value = 0;
@@ -258,8 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             switch (msgId) {
                 case 'sub':
-                case 'resub':
-                    eventType = 'SUB';
+                case 'resub': // ✅ Les resubs sont bien gérés
+                    eventType = msgId === 'sub' ? 'SUB' : 'RESUB';
                     if (subPlan === 'Prime') {
                         value = parseFloat(state.settings.primeRatio);
                     } else if (subPlan === '2000') {
@@ -277,23 +306,31 @@ document.addEventListener('DOMContentLoaded', () => {
                         value = parseFloat(state.settings.subT2Ratio);
                     } else if (subPlan === '3000') {
                         value = parseFloat(state.settings.subT3Ratio);
-                    } else { // '1000' ou autres
+                    } else {
                         value = parseFloat(state.settings.subT1Ratio);
                     }
                     break;
 
                 case 'submysterygift':
-                    // Pour les mystery gifts, on peut récupérer le nombre
                     const giftCount = parseInt(tags['msg-param-mass-gift-count'] || 1, 10);
                     eventType = 'MYSTERY_GIFTS';
                     debugLog(`🎁 MYSTERY GIFT: ${giftCount} subs de ${username}`);
-                    
-                    // Utiliser le ratio T1 par défaut pour les mystery gifts
                     value = parseFloat(state.settings.subT1Ratio) * giftCount;
                     break;
 
+                case 'anonsubgift':
+                    eventType = 'ANON_SUBGIFT';
+                    debugLog(`👤 ANON SUBGIFT détecté`);
+                    if (subPlan === '2000') {
+                        value = parseFloat(state.settings.subT2Ratio);
+                    } else if (subPlan === '3000') {
+                        value = parseFloat(state.settings.subT3Ratio);
+                    } else {
+                        value = parseFloat(state.settings.subT1Ratio);
+                    }
+                    break;
+
                 default:
-                    // Autres événements comme raids, etc.
                     debugLog(`ℹ️ Événement non traité: ${msgId}`);
                     return;
             }
@@ -305,24 +342,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        // Événement pour les raids (optionnel)
+        // ✅ GESTIONNAIRE DE RAIDS (optionnel)
         const onRaided = (channel, username, viewers) => {
             console.log(`[RAID] ${username} a raid avec ${viewers} viewers`);
             debugLog(`🚀 RAID: ${username} (${viewers} viewers)`);
-            // Vous pouvez ajouter une logique pour les raids si souhaité
         };
 
-        // ⚠️ CORRECTION PRINCIPALE: Attacher directement au client TMI
+        // Attacher les gestionnaires
         twitchClient.on('message', onMessage);
         twitchClient.on('usernotice', onUserNotice);
         twitchClient.on('raided', onRaided);
 
-        // Stocker les références pour les tests
+        // ✅ GESTIONNAIRE POUR DIAGNOSTIQUER LES ÉVÉNEMENTS MANQUÉS
+        twitchClient.on('cheer', (channel, userstate, message) => {
+            debugLog(`🔔 CHEER EVENT: ${userstate.bits} bits`);
+        });
+
+        twitchClient.on('subscription', (channel, username, method, message, userstate) => {
+            debugLog(`🔔 SUBSCRIPTION EVENT: ${username} - ${method}`);
+        });
+
+        // Stocker les références
         eventHandlers.onMessage = onMessage;
         eventHandlers.onUserNotice = onUserNotice;
         eventHandlers.onRaided = onRaided;
 
-        debugLog("✅ Gestionnaires d'événements configurés");
+        debugLog("✅ Gestionnaires d'événements configurés avec debug amélioré");
     }
 
     function updateGlobalTotal(amount, source) {
